@@ -1,0 +1,282 @@
+{
+  "info": {
+    "_postman_id": "secureweb-postman-collection-v1",
+    "name": "SecureWeb REST API Collection",
+    "description": "Bộ API kiểm thử hoàn chỉnh cho hệ thống SecureWeb – Secure IT Asset Management & Cybersecurity Monitoring Platform theo khung NIST CSF 1.1.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01. Authentication & IAM",
+      "item": [
+        {
+          "name": "Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.token) {",
+                  "    pm.environment.set('token', json.token);",
+                  "    pm.test('Token saved to environment', () => pm.expect(json.token).to.be.a('string'));",
+                  "}",
+                  "pm.test('Status is 200 OK', () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@gmail.com\",\n  \"password\": \"Admin@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Get Current Profile (Me)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        },
+        {
+          "name": "Register New User",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"analyst_demo\",\n  \"email\": \"analyst_demo@gmail.com\",\n  \"password\": \"Analyst@123\",\n  \"firstName\": \"Security\",\n  \"lastName\": \"Analyst\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Asset Management (ID.AM)",
+      "item": [
+        {
+          "name": "Get All Assets",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/assets", "host": ["{{baseUrl}}"], "path": ["assets"] }
+          }
+        },
+        {
+          "name": "Get Asset Categories",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/assets/categories", "host": ["{{baseUrl}}"], "path": ["assets", "categories"] }
+          }
+        },
+        {
+          "name": "Create New Asset",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assetId\": \"ASSET-999\",\n  \"name\": \"Database Server Secondary\",\n  \"type\": \"Server\",\n  \"ipAddress\": \"192.168.10.35\",\n  \"os\": \"Ubuntu 24.04 LTS\",\n  \"owner\": \"Database Admin\",\n  \"location\": \"DC-2\",\n  \"status\": \"active\",\n  \"criticality\": \"high\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/assets", "host": ["{{baseUrl}}"], "path": ["assets"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Vulnerabilities (ID.RA-1)",
+      "item": [
+        {
+          "name": "Get All Vulnerabilities",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/vulnerabilities", "host": ["{{baseUrl}}"], "path": ["vulnerabilities"] }
+          }
+        },
+        {
+          "name": "Get Vulnerability Stats",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/vulnerabilities/stats", "host": ["{{baseUrl}}"], "path": ["vulnerabilities", "stats"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Risk Management (ID.RA-5)",
+      "item": [
+        {
+          "name": "Get All Risks",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/risks", "host": ["{{baseUrl}}"], "path": ["risks"] }
+          }
+        },
+        {
+          "name": "Get Risk Matrix 3x3",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/risks/matrix", "host": ["{{baseUrl}}"], "path": ["risks", "matrix"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Audit Logs (DE.AE)",
+      "item": [
+        {
+          "name": "Get Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/audit-logs?limit=50", "host": ["{{baseUrl}}"], "path": ["audit-logs"], "query": [{ "key": "limit", "value": "50" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Security Alerts (DE.CM)",
+      "item": [
+        {
+          "name": "Get Alerts",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/alerts", "host": ["{{baseUrl}}"], "path": ["alerts"] }
+          }
+        },
+        {
+          "name": "Get Alert Stats",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/alerts/stats", "host": ["{{baseUrl}}"], "path": ["alerts", "stats"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. Incident Management (RS.RP)",
+      "item": [
+        {
+          "name": "Get All Incidents",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/incidents", "host": ["{{baseUrl}}"], "path": ["incidents"] }
+          }
+        },
+        {
+          "name": "Get Incident Stats",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/incidents/stats", "host": ["{{baseUrl}}"], "path": ["incidents", "stats"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08. Integrations & Security Tools",
+      "item": [
+        {
+          "name": "Get Integrations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/integrations", "host": ["{{baseUrl}}"], "path": ["integrations"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09. Backup & Recovery (RECOVER)",
+      "item": [
+        {
+          "name": "Get Backups",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/backups", "host": ["{{baseUrl}}"], "path": ["backups"] }
+          }
+        },
+        {
+          "name": "Get Backup Stats",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/backups/stats", "host": ["{{baseUrl}}"], "path": ["backups", "stats"] }
+          }
+        },
+        {
+          "name": "Create Manual Backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"postman_demo_backup\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/backups", "host": ["{{baseUrl}}"], "path": ["backups"] }
+          }
+        },
+        {
+          "name": "Get System Settings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/backups/settings/all", "host": ["{{baseUrl}}"], "path": ["backups", "settings", "all"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Executive Reports & Export (CSF)",
+      "item": [
+        {
+          "name": "Get Executive Security Report",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/reports/executive", "host": ["{{baseUrl}}"], "path": ["reports", "executive"] }
+          }
+        },
+        {
+          "name": "Export Assets (JSON)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/reports/export/assets?format=json", "host": ["{{baseUrl}}"], "path": ["reports", "export", "assets"], "query": [{ "key": "format", "value": "json" }] }
+          }
+        },
+        {
+          "name": "Export Vulnerabilities (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{baseUrl}}/reports/export/vulnerabilities?format=csv", "host": ["{{baseUrl}}"], "path": ["reports", "export", "vulnerabilities"], "query": [{ "key": "format", "value": "csv" }] }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,206 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  userRoles   UserRole[]
+}
+
+model User {
+  id               String      @id @default(cuid())
+  username         String      @unique
+  email            String      @unique
+  passwordHash     String
+  firstName        String?
+  lastName         String?
+  isActive         Boolean     @default(true)
+  failedLoginCount Int         @default(0)
+  lastLoginAt      DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  userRoles        UserRole[]
+  auditLogs        AuditLog[]
+}
+
+model UserRole {
+  id        String   @id @default(cuid())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+}
+
+model AssetCategory {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  assets      Asset[]
+}
+
+model Asset {
+  id          String        @id @default(cuid())
+  assetId     String        @unique
+  name        String
+  type        String
+  categoryId  String?
+  ipAddress   String?
+  macAddress  String?
+  os          String?
+  owner       String?
+  location    String?
+  status      String        @default("active")
+  criticality String        @default("medium")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  category    AssetCategory? @relation(fields: [categoryId], references: [id])
+  alerts      Alert[]
+  risks       Risk[]
+  incidents   Incident[]
+  vulnerabilities Vulnerability[]
+}
+
+model Vulnerability {
+  id             String    @id @default(cuid())
+  assetId        String
+  title          String
+  severity       String
+  cve            String?
+  cvssScore      Float?
+  description    String?
+  recommendation String?
+  status         String    @default("open")
+  discoveredAt   DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  asset          Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+}
+
+model Risk {
+  id          String   @id @default(cuid())
+  assetId     String
+  title       String
+  likelihood  String
+  impact      String
+  riskLevel   String
+  mitigation  String?
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String    @id @default(cuid())
+  userId    String?
+  action    String
+  resource  String
+  ipAddress String?
+  status    String    @default("success")
+  details   String?
+  createdAt DateTime  @default(now())
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model SecurityEvent {
+  id          String   @id @default(cuid())
+  eventType   String
+  severity    String
+  source      String?
+  sourceIp    String?
+  description String
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+}
+
+model Alert {
+  id             String   @id @default(cuid())
+  title          String
+  description    String
+  severity       String
+  relatedAssetId String?
+  status         String   @default("open")
+  createdAt      DateTime @default(now())
+  asset          Asset?   @relation(fields: [relatedAssetId], references: [id], onDelete: SetNull)
+}
+
+model Incident {
+  id          String          @id @default(cuid())
+  title       String
+  description String
+  type        String
+  severity    String
+  assetId     String?
+  detectedBy  String?
+  detectedAt  DateTime        @default(now())
+  status      String          @default("new")
+  assignedTo  String?
+  resolution  String?
+  closedAt    DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  asset       Asset?          @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  actions     IncidentAction[]
+}
+
+model IncidentAction {
+  id        String    @id @default(cuid())
+  incidentId String
+  actorId   String?
+  action    String
+  notes     String?
+  createdAt DateTime  @default(now())
+  incident  Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+}
+
+model Backup {
+  id         String    @id @default(cuid())
+  name       String
+  filePath   String
+  sizeBytes  Int?
+  status     String    @default("success")
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+  checksum   String?
+}
+
+model RecoveryHistory {
+  id          String    @id @default(cuid())
+  backupId    String
+  restoredBy  String?
+  restoredAt  DateTime  @default(now())
+  status      String    @default("success")
+  notes       String?
+}
+
+model Integration {
+  id         String   @id @default(cuid())
+  name       String
+  type       String
+  endpoint   String?
+  status     String   @default("configured")
+  configJson String?
+  createdAt  DateTime @default(now())
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  category  String?
+  updatedAt DateTime @updatedAt
+}
