@@ -1,6 +1,15 @@
 import api from './api';
 
 export const integrationService = {
+  async getWazuhStatus() { return (await api.get('/integrations/wazuh/status')).data; },
+  async setupWazuh() { return (await api.post('/integrations/wazuh/setup')).data; },
+  async downloadWazuhConnector() {
+    const response = await api.get('/integrations/wazuh/connector', { responseType: 'blob' });
+    const url = URL.createObjectURL(response.data);
+    const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = 'custom-secureweb'; anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
   async getIntegrations() {
     const res = await api.get('/integrations');
     return res.data;

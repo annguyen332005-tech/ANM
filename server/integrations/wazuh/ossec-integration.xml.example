@@ -1,0 +1,9 @@
+<!-- Add inside the existing ossec_config element on Ubuntu. -->
+<!-- Replace the placeholder with WAZUH_WEBHOOK_KEY from server/.env on MSI. -->
+<integration>
+  <name>custom-secureweb</name>
+  <hook_url>http://192.168.146.1:4000/api/webhooks/wazuh</hook_url>
+  <api_key>THAY_BANG_WAZUH_WEBHOOK_KEY_TRONG_SERVER_ENV</api_key>
+  <level>5</level>
+  <alert_format>json</alert_format>
+</integration>

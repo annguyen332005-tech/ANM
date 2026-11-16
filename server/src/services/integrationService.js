@@ -63,6 +63,9 @@ class IntegrationService {
   }
 
   async simulateEvent(integrationId, eventData, userId, ipAddress) {
+    if (integrationId === 'wazuh-webhook') {
+      throw Object.assign(new Error('Bộ nhận Wazuh này chỉ nhận dữ liệu qua webhook. Dùng tích hợp demo khác để mô phỏng.'), { statusCode: 400 });
+    }
     const integration = await prisma.integration.findUnique({ where: { id: integrationId } });
     if (!integration) {
       const error = new Error('Không tìm thấy công cụ tích hợp.');

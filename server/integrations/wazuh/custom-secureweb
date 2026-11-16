@@ -1,0 +1,60 @@
+#!/usr/bin/python3
+"""Wazuh 4.x Integrator: alert_file, api_key, hook_url. No third-party packages."""
+import json
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+
+def send_alert(alert, key, url, attempts=3):
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError('hook_url must be an HTTP(S) URL without credentials')
+    if len(key) < 32:
+        raise ValueError('api_key must contain at least 32 characters')
+    payload = json.dumps(alert, ensure_ascii=False).encode('utf-8')
+    # Never forward the secret to a redirected location.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+    opener = urllib.request.build_opener(NoRedirect)
+    for attempt in range(attempts):
+        try:
+            req = urllib.request.Request(url, data=payload, method='POST', headers={
+                'Content-Type': 'application/json', 'X-Wazuh-Key': key,
+            })
+            with opener.open(req, timeout=10) as response:
+                if response.status in (200, 201):
+                    return
+                raise RuntimeError('Unexpected HTTP status')
+        except urllib.error.HTTPError as exc:
+            # Body may include personal alert details; do not print it or the key.
+            if exc.code != 429 and exc.code < 500:
+                raise RuntimeError(f'Webhook rejected alert (HTTP {exc.code}); check key, URL and payload') from None
+            if attempt == attempts - 1:
+                raise RuntimeError(f'Webhook unavailable (HTTP {exc.code}); replay alert later') from None
+        except (urllib.error.URLError, TimeoutError, OSError):
+            if attempt == attempts - 1:
+                raise RuntimeError('Cannot reach webhook after retries; check network and backend') from None
+        time.sleep(2 ** attempt)
+
+
+def main():
+    if len(sys.argv) < 4:
+        print('Usage: custom-secureweb ALERT_JSON_FILE API_KEY WEBHOOK_URL', file=sys.stderr)
+        return 1
+    try:
+        with open(sys.argv[1], encoding='utf-8') as stream:
+            alert = json.load(stream)
+        send_alert(alert, sys.argv[2], sys.argv[3])
+        print('SecureWeb: alert delivered')
+        return 0
+    except Exception as exc:
+        print(f'SecureWeb delivery failed: {exc}', file=sys.stderr)
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

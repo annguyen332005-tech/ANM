@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { integrationService } from '../services/integrationService';
 import { useAuth } from '../context/AuthContext';
+import WazuhIntegrationPanel from '../components/WazuhIntegrationPanel';
 
 const INTEGRATION_TYPES = ['SIEM', 'IDS_IPS', 'Monitoring', 'WAF', 'EDR', 'Scanner', 'Other'];
 
@@ -277,6 +278,7 @@ export default function IntegrationManagementPage() {
       )}
 
       {/* Cards */}
+      {canManage && <WazuhIntegrationPanel />}
       {loading ? (
         <div className="p-10 text-center text-slate-400 text-sm">Đang tải...</div>
       ) : (
@@ -314,7 +316,7 @@ export default function IntegrationManagementPage() {
                   </div>
                 )}
 
-                {canManage && (
+                {canManage && intg.id !== 'wazuh-webhook' && (
                   <div className="flex gap-2 mt-3">
                     <button onClick={() => setSimulateTarget(intg)}
                       className="flex-1 py-1.5 bg-orange-900/30 hover:bg-orange-800/50 border border-orange-700/40 text-orange-300 rounded-lg text-xs font-semibold transition">
@@ -341,7 +343,7 @@ export default function IntegrationManagementPage() {
       <div className="p-4 bg-blue-950/30 border border-blue-500/20 rounded-xl text-xs text-blue-300 space-y-1">
         <p className="font-semibold text-blue-200">ℹ️ Về tích hợp công cụ bảo mật:</p>
         <p>Các công cụ được liệt kê là các hệ thống thực tế trong kiến trúc NIST DE.CM. Trong môi trường demo, nút <strong>"⚡ Mô phỏng sự kiện"</strong> giả lập việc công cụ gửi cảnh báo vào SecureWeb, tạo SecurityEvent và Alert trong database để demo luồng phát hiện → ứng phó.</p>
-        <p>Trong triển khai thực tế, cần cài đặt connector/agent tương ứng cho từng công cụ (Wazuh API, Suricata EVE JSON, Prometheus Alertmanager webhook, v.v.)</p>
+        <p>Wazuh có bộ nhận webhook riêng ở khung phía trên. Các tích hợp còn lại vẫn dùng mô phỏng cho đến khi cài connector tương ứng.</p>
       </div>
 
       {/* Modals */}

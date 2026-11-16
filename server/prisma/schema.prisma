@@ -224,3 +224,20 @@ model ScanJob {
   createdAt     DateTime @default(now())
   finishedAt    DateTime?
 }
+
+model WazuhReceipt {
+  id          String   @id @default(cuid())
+  manager     String
+  externalId  String
+  agentName   String
+  ruleId      String
+  level       Int
+  severity    String
+  occurredAt  DateTime
+  receivedAt  DateTime @default(now())
+  alertId     String
+  eventId     String
+  payloadJson String
+
+  @@unique([manager, externalId])
+}

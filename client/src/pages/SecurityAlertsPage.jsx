@@ -28,9 +28,9 @@ export default function SecurityAlertsPage() {
 
   const canManage = hasRole('Admin') || hasRole('Security Analyst');
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (quiet = false) => {
     try {
-      setLoading(true);
+      if (!quiet) setLoading(true);
       const params = {};
       if (filterSeverity) params.severity = filterSeverity;
       if (filterStatus) params.status = filterStatus;
@@ -43,11 +43,15 @@ export default function SecurityAlertsPage() {
     } catch (err) {
       console.error('Load alerts error:', err);
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [filterSeverity, filterStatus]);
 
   useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') loadData(true); }, 15000);
+    return () => clearInterval(timer);
+  }, [loadData]);
 
   const showFeedback = (type, message) => {
     setFeedback({ type, message });

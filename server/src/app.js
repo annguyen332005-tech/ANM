@@ -67,6 +67,7 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Quá nhiều request, vui lòng thử lại sau 15 phút.' },
 });
+app.use('/api/webhooks/wazuh', require('./routes/wazuhWebhookRoutes'));
 app.use('/api', apiLimiter);
 
 app.get('/api/health', (req, res) => {
