@@ -25,6 +25,8 @@ model User {
   lastName         String?
   isActive         Boolean     @default(true)
   failedLoginCount Int         @default(0)
+  lockoutCount     Int         @default(0)
+  lockedUntil      DateTime?
   lastLoginAt      DateTime?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
@@ -203,4 +205,22 @@ model SystemSetting {
   value     String
   category  String?
   updatedAt DateTime @updatedAt
+}
+
+model ScanJob {
+  id            String   @id @default(cuid())
+  assetId       String
+  assetName     String
+  target        String
+  ports         String
+  createdBy     String
+  status        String   @default("queued")
+  phase         String   @default("Đang chờ")
+  progress      Float    @default(0)
+  output        String   @default("")
+  error         String?
+  findingsJson  String   @default("[]")
+  importedCount Int      @default(0)
+  createdAt     DateTime @default(now())
+  finishedAt    DateTime?
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Modal from '../common/Modal';
+import { parseScanReport, SCAN_FORMATS } from '../../utils/parseScanReport';
 
 const PRESETS = {
   'OWASP ZAP': [
@@ -83,11 +84,40 @@ export default function ScanImportModal({ isOpen, onClose, onImport, assets = []
   const [findingsJson, setFindingsJson] = useState(JSON.stringify(PRESETS['OWASP ZAP'], null, 2));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fileInfo, setFileInfo] = useState('');
+  const [fileLoading, setFileLoading] = useState(false);
 
   const handleToolChange = (newTool) => {
+    setFileInfo('');
+    setError('');
     setToolName(newTool);
     if (PRESETS[newTool]) {
       setFindingsJson(JSON.stringify(PRESETS[newTool], null, 2));
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError('');
+    setFileInfo('');
+    setFindingsJson('[]');
+    setFileLoading(true);
+    try {
+      const extension = `.${file.name.split('.').pop().toLowerCase()}`;
+      if (!SCAN_FORMATS[toolName].accept.split(',').includes(extension)) throw new Error(`Vui lòng chọn file ${SCAN_FORMATS[toolName].label} cho ${toolName}.`);
+      if (file.size > 2 * 1024 * 1024) throw new Error('File quá lớn. Vui lòng chọn file tối đa 2 MB.');
+      const result = parseScanReport(toolName, await file.text());
+      setTarget(result.target);
+      setFindingsJson(JSON.stringify(result.findings, null, 2));
+      setFileInfo(`${file.name}: ${result.findings.length} phát hiện từ ${toolName}. Xem lại dữ liệu bên dưới trước khi nhập.`);
+      const matchedAsset = assets.find((asset) => asset.ipAddress === result.target);
+      setAssetId(matchedAsset?.id || '');
+    } catch (err) {
+      setError(err.message || 'Không thể đọc file báo cáo.');
+    } finally {
+      setFileLoading(false);
+      e.target.value = '';
     }
   };
 
@@ -149,6 +179,33 @@ export default function ScanImportModal({ isOpen, onClose, onImport, assets = []
           </div>
         )}
 
+        <div className="p-3 border border-slate-700 rounded-lg space-y-2">
+          <label htmlFor="scan-report-file" className="block text-xs font-semibold text-slate-300">
+            Tải báo cáo {toolName} ({SCAN_FORMATS[toolName].label})
+          </label>
+          <input
+            id="scan-report-file"
+            type="file"
+            accept={SCAN_FORMATS[toolName].accept}
+            disabled={loading || fileLoading}
+            onChange={handleFileUpload}
+            className="block w-full text-xs text-slate-300 file:mr-3 file:rounded file:border-0 file:bg-cyan-700 file:px-3 file:py-2 file:text-white"
+          />
+          <p className="text-xs text-slate-400">Chọn công cụ quét bên dưới trước khi tải file. Hỗ trợ một mục tiêu mỗi file, tối đa 2 MB. {toolName === 'Nmap' && 'Cổng mở được ghi nhận ở mức Info, chưa xác nhận lỗ hổng hay CVE.'}</p>
+          {toolName === 'Nmap' && (
+            <details className="text-xs text-slate-400">
+              <summary className="cursor-pointer text-cyan-400">Xem cấu trúc JSON Nmap được hỗ trợ</summary>
+              <pre className="mt-2 overflow-x-auto whitespace-pre-wrap">{JSON.stringify({ target: '192.168.2.19', ports: [
+                { port: 4000, protocol: 'tcp', state: 'open', service: 'http', version: 'Node.js Express framework' },
+                { port: 5173, protocol: 'tcp', state: 'open', service: 'unknown' },
+              ] }, null, 2)}</pre>
+              <p className="mt-1">Cũng hỗ trợ hosts: [&#123; ip, ports &#125;]. JSON cần theo cấu trúc này; đổi đuôi file TXT thành JSON sẽ không chuyển đổi dữ liệu.</p>
+            </details>
+          )}
+          {fileLoading && <p className="text-xs text-cyan-400">Đang đọc báo cáo...</p>}
+          {fileInfo && <p role="status" className="text-xs text-cyan-400">{fileInfo}</p>}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
@@ -156,6 +213,7 @@ export default function ScanImportModal({ isOpen, onClose, onImport, assets = []
             </label>
             <select
               value={toolName}
+              disabled={loading || fileLoading}
               onChange={(e) => handleToolChange(e.target.value)}
               className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-cyan-500 transition font-mono"
             >
@@ -206,7 +264,7 @@ export default function ScanImportModal({ isOpen, onClose, onImport, assets = []
               Dữ liệu phát hiện (JSON Findings Array)
             </label>
             <span className="text-[11px] text-cyan-400 font-mono">
-              Đang tải mẫu chuẩn cho {toolName}
+              {fileInfo ? 'Dữ liệu từ file đã chọn' : `Dữ liệu mẫu cho ${toolName}`}
             </span>
           </div>
           <textarea
@@ -231,7 +289,7 @@ export default function ScanImportModal({ isOpen, onClose, onImport, assets = []
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || fileLoading}
               className="px-5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg text-xs font-semibold tracking-wide transition shadow-lg shadow-cyan-600/30 disabled:opacity-50 flex items-center gap-2"
             >
               {loading && <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}

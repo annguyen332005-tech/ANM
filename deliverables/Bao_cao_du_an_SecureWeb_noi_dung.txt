@@ -1,0 +1,251 @@
+SECUREWEB
+BÁO CÁO MÔ TẢ DỰ ÁN
+HỆ THỐNG QUẢN LÝ AN TOÀN THÔNG TIN
+Kiến trúc • Chức năng đã triển khai • Khoảng trống hiện tại
+
+Thuộc tính
+Nội dung
+Phạm vi
+Phiên bản mã nguồn tại D:\BTANM; bao gồm quét Nmap trực tiếp vừa bổ sung.
+Ngày lập
+16/11/2026 — múi giờ Asia/Bangkok
+Cách phân nhóm
+Identify, Protect, Detect, Respond, Recover theo cách tổ chức CSF 1.1 trong dự án.
+Mục đích
+Dùng để trình bày dự án, đánh giá mức độ hoàn thiện và định hướng phát triển.
+
+Tài liệu phản ánh mã nguồn và các kiểm thử đã ghi nhận trong quá trình phát triển. Chưa phải kết quả kiểm toán độc lập hoặc chứng nhận tuân thủ. Không chứa mật khẩu, token hay nội dung file .env.
+Nội dung tài liệu
+01  Tổng quan và mức độ hoàn thiện
+02  Kiến trúc và luồng dữ liệu
+03–07  Đánh giá chi tiết 5 nhóm chức năng
+08  Các phần còn thiếu và lộ trình
+09  Kiểm thử, nghiệm thu và nguồn đối chiếu
+01  Tổng quan dự án
+SecureWeb là ứng dụng web quản lý thông tin an ninh tập trung cho môi trường học tập, thử nghiệm và mô hình mạng nhỏ. Hệ thống tập hợp tài sản, phát hiện bảo mật, rủi ro, cảnh báo, sự cố, nhật ký và bản sao lưu vào cùng một giao diện.
+Giá trị chính của dự án là kết nối dữ liệu nghiệp vụ với quy trình quản lý: biết tài sản nào cần bảo vệ, phát hiện nào cần xử lý, ai đã thực hiện hành động và dữ liệu nào đã được sao lưu. Dự án chưa thay thế đầy đủ SIEM, IDS/IPS, firewall hoặc giải pháp phục hồi chuyên dụng.
+Người sử dụng và màn hình chính
+•  Vai trò trong mã nguồn: Admin, Security Analyst, IT Manager và User. Quyền thực tế phụ thuộc từng API; không phải mọi vai trò đều được thao tác trên tất cả màn hình.
+•  Các màn hình: SOC Dashboard, Tài sản, Lỗ hổng, Rủi ro, Nhật ký kiểm toán, Cảnh báo, Sự cố, Tích hợp bảo mật, Sao lưu & Phục hồi, Báo cáo và tổng quan NIST.
+Tóm tắt mức độ hoàn thiện
+Nhóm
+Đã có
+Giới hạn chính
+Identify
+Quản lý tài sản/rủi ro; nhập báo cáo; chạy Nmap thật.
+Chưa chạy tự động Nessus/OpenVAS/ZAP; cổng mở không đồng nghĩa lỗ hổng.
+Protect
+Đăng nhập, băm mật khẩu, JWT, phân quyền, khóa đăng nhập.
+Chưa tích hợp firewall/VPN/AD; còn khoảng trống quản lý phiên.
+Detect
+Audit log, cảnh báo nội bộ; mô phỏng nguồn bên ngoài.
+Chưa có bộ nhận cảnh báo thật từ Wazuh/Grafana/Snort.
+Respond
+Hồ sơ sự cố, lịch sử xử lý, chuyển trạng thái.
+Chặn IP/cô lập mới dừng ở thông tin và trạng thái trong DB.
+Recover
+Tạo backup SQLite thật, checksum, lịch sử phục hồi.
+Khôi phục mới mô phỏng; chưa thay thế DB đang chạy.
+
+Đối chiếu mã nguồn: client/src/layouts/DashboardLayout.jsx; server/src/routes/*; server/src/services/*.
+02  Kiến trúc hệ thống
+Tầng
+Công nghệ và trách nhiệm
+Giao diện
+React, Vite, React Router, Tailwind CSS, Recharts; Axios gọi API và gửi JWT.
+API / nghiệp vụ
+Node.js, Express; phân lớp route → controller/service → Prisma; Zod kiểm tra đầu vào; Helmet, CORS và rate limiting.
+Dữ liệu
+SQLite qua Prisma: User/Role, Asset, Vulnerability, Risk, Alert, SecurityEvent, Incident/Action, AuditLog, Backup/RecoveryHistory, Integration, ScanJob.
+Quét ngoài tiến trình
+Backend gọi executable Nmap bằng spawn, shell:false; theo dõi stdout/stderr và lưu tác vụ.
+
+Các luồng hoạt động chính
+•  Nhập file: trình duyệt đọc/chuẩn hóa báo cáo → JSON findings → API kiểm tra dữ liệu → lưu phát hiện → tải lại thống kê.
+•  Quét ngay: chọn tài sản/cổng → tạo ScanJob → Nmap chạy nền → đọc kết quả → lưu phát hiện và lịch sử trong transaction → giao diện lấy trạng thái mỗi 5 giây.
+Luồng Wazuh trong hình là thiết kế dự kiến. Chưa xác nhận Agent/Manager đã được cài và kết nối thành công; API nhận cảnh báo Wazuh chưa được xây dựng trong phiên bản này.
+Đối chiếu mã nguồn: server/src/app.js; server/prisma/schema.prisma; server/src/services/nmapScanService.js; client/src/services/api.js.
+03  Identify — Nhận diện
+Mục tiêu: quản lý tài sản, ghi nhận phát hiện bảo mật và hỗ trợ ưu tiên rủi ro theo tài sản bị ảnh hưởng.
+Những phần đã thực hiện
+•  Quản lý tài sản với tên/mã, loại, IP, hệ điều hành, chủ sở hữu, trạng thái và mức quan trọng; liên kết với phát hiện, rủi ro và sự cố.
+•  Quản lý phát hiện: tạo/sửa/xóa, tìm kiếm và lọc theo mức độ, trạng thái, tài sản; lưu CVE/CWE, CVSS, mô tả và khuyến nghị khi dữ liệu có cung cấp.
+•  Đánh giá rủi ro dựa trên khả năng xảy ra và mức ảnh hưởng; theo dõi biện pháp xử lý và trạng thái.
+Công cụ
+Định dạng nhập đã hỗ trợ
+Nmap
+.txt dạng -oN; .json theo cấu trúc target/ports hoặc hosts mà ứng dụng quy định.
+Nessus
+.nessus hoặc .xml theo Nessus v2.
+OpenVAS / Greenbone
+.xml chứa results/result theo cấu trúc bộ đọc hiện tại.
+OWASP ZAP
+.json dạng Traditional JSON với site và alerts.
+
+Quét Nmap trực tiếp đã chạy thật
+•  Chọn một tài sản có IPv4 và tối đa 100 cổng TCP; thực thi Nmap tại D:/nmap/nmap.exe trên máy backend. Không nhận câu lệnh tùy ý từ người dùng.
+•  Mỗi backend chạy một tác vụ tại một thời điểm; thời gian tối đa 150 giây. Có tiến trình theo bước, nhật ký, 30 lần quét gần nhất và tải TXT; lịch sử cũ vẫn giữ trong DB.
+•  Kết quả được tự lưu ở mức Info. Một lần quét thành công không thấy cổng mở vẫn lưu lịch sử với 0 phát hiện.
+Phần còn thiếu
+Chưa tự chạy Nessus/OpenVAS/ZAP, chưa có quét định kỳ hoặc hàng đợi nhiều worker. Nhập file chỉ hỗ trợ một mục tiêu/file, tối đa 2 MB; JSON Nmap không phải mọi biến thể JSON đều đọc được. Quét lại tạo bộ phát hiện mới, chưa chống trùng hoặc tự xác nhận đã vá. Cần thêm kiểm thử XML bằng báo cáo thực tế.
+Nmap -sV nhận diện dịch vụ; một cổng đang mở hoặc một banner phiên bản chưa đủ để khẳng định có CVE. Tổng số trên trang lỗ hổng hiện bao gồm cả phát hiện Info.
+Đối chiếu mã nguồn: assetService.js; vulnerabilityService.js; riskService.js; nmapScanService.js; client/src/utils/parseScanReport.js; parseNmapReport.js.
+04  Protect — Bảo vệ
+Mục tiêu hiện tại tập trung vào bảo vệ truy cập ứng dụng và kiểm soát thao tác với dữ liệu nghiệp vụ.
+Những phần đã thực hiện
+•  Đăng ký tài khoản, chuẩn hóa email, băm mật khẩu bằng thư viện Argon2; đăng nhập cấp JWT và gắn token vào yêu cầu API.
+•  Phân quyền phía backend theo vai trò; giao diện ẩn/hiện thao tác tương ứng. Các chức năng như xóa dữ liệu, quét, backup có kiểm tra quyền ở route.
+•  Kiểm tra dữ liệu bằng Zod; Helmet thêm header bảo mật; CORS quản lý origin; giới hạn request chung cho /api là 200 yêu cầu/15 phút.
+Quy tắc khóa đăng nhập mới
+Tình huống
+Hành vi
+Sai 1–4 lần
+Tăng bộ đếm và trả thông báo số lần sai. Mật khẩu sai ngắn vẫn được đếm nếu không rỗng và qua validation.
+Sai lần thứ 5 đầu tiên
+Khóa đăng nhập 5 phút; lưu thời điểm hết khóa và lịch sử đã khóa.
+Thử trong thời gian khóa
+Từ chối cả mật khẩu đúng; không cộng tiếp số lần sai.
+Hết 5 phút
+Cho phép thử lại. Đăng nhập đúng xóa bộ đếm liên tiếp, giữ lịch sử khóa lần đầu.
+Đợt sai đủ 5 lần tiếp theo
+Đặt isActive=false: khóa vĩnh viễn hoặc đến khi quản trị viên can thiệp.
+
+Phần còn thiếu
+•  Chưa tích hợp cấu hình firewall, VPN/IPSec, Radius, Kerberos hoặc Active Directory/Domain Controller.
+•  Chưa có MFA, quy trình quên mật khẩu và quy trình mở khóa tài khoản hoàn chỉnh trên giao diện.
+•  Middleware xác thực JWT hiện chưa kiểm tra trạng thái khóa của tài khoản cho mọi request; token đã phát hành có thể còn dùng đến khi hết hạn. Chưa có cơ chế thu hồi phiên tập trung.
+•  Token đang lưu trong localStorage; triển khai thực tế cần đánh giá quản lý phiên, HTTPS và cấu hình secret. Rate limit dùng chung chưa thay thế kiểm soát đăng nhập chuyên biệt.
+Đối chiếu mã nguồn: authService.js; middleware/auth.js; validators/authValidator.js; app.js; client/src/services/api.js.
+05  Detect — Phát hiện
+Mục tiêu: ghi nhận sự kiện và cảnh báo, giúp người quản trị nhận biết vấn đề đang phát sinh. Phiên bản hiện tại có khả năng theo dõi bên trong ứng dụng nhưng chưa hoàn thiện tiếp nhận cảnh báo bên ngoài.
+Những phần đã thực hiện
+•  Ghi AuditLog cho nhiều thao tác: đăng ký/đăng nhập, quản lý dữ liệu, quét, nhập báo cáo, backup và xử lý sự cố.
+•  Quản lý Alert và SecurityEvent: nguồn, mức độ, mô tả, IP và trạng thái; tổng hợp số liệu trên Dashboard.
+•  Khi tạo/nhập phát hiện Critical, backend có thể tạo cảnh báo và sự kiện. Sự cố High/Critical cũng có luồng tạo sự kiện nội bộ.
+•  Quản lý danh sách tích hợp, loại, endpoint và cấu hình. Hàm simulateEvent tạo sự kiện và cảnh báo mô phỏng để trình diễn luồng giao diện.
+Điểm cần phân biệt khi thuyết trình
+Có thật trong phiên bản này
+Chưa có
+Nhật ký thao tác và cảnh báo sinh bởi nghiệp vụ web.
+Thu thập tự động sự kiện hệ điều hành Windows/Linux.
+Khai báo một tích hợp tên Wazuh hoặc Grafana.
+Kết nối thật, xác thực nguồn và nhận sự kiện từ Wazuh/Grafana/Snort.
+Bấm mô phỏng để tạo cảnh báo thử.
+Phát hiện độc lập dấu hiệu tấn công trong lưu lượng mạng.
+
+Thiết kế tiếp theo với Wazuh
+Windows 11 ảo cài Agent → Ubuntu Server chạy Manager → custom integration gửi JSON qua HTTP(S) → API tiếp nhận trên máy MSI → lưu sự kiện/cảnh báo → hiển thị trên web. Đây là phương án tích hợp tiếp theo, chưa phải cấu hình đã hoàn tất.
+Backend cần thêm webhook có xác thực, ánh xạ rule/level/agent, nhận diện bản tin trùng, ghi thời điểm sự kiện và kết quả tiếp nhận. Script gửi cần timeout, retry và lưu lỗi. Linux phải truy cập được cổng backend; ping thành công không phải điều kiện bắt buộc.
+Chưa có dữ liệu chứng minh hệ thống hiện đã nhận được một cảnh báo Wazuh thật từ máy Windows 11.
+Đối chiếu mã nguồn: integrationService.js: simulateEvent; vulnerabilityService.js; incidentService.js; auditService.js; middleware/audit.js.
+06  Respond — Ứng phó
+Mục tiêu: quản lý vòng đời sự cố, trách nhiệm xử lý và bằng chứng về các thao tác ứng phó.
+Những phần đã thực hiện
+•  Tạo/sửa/xóa hồ sơ sự cố với tiêu đề, mô tả, loại, mức độ, tài sản, người phụ trách và hướng giải quyết.
+•  Quản lý các trạng thái new, investigating, contained, resolved, closed; lưu lịch sử hành động, người thao tác và thời gian.
+•  Có các thao tác ứng phó theo mẫu và ghi nhật ký kiểm toán; quyền tạo/cập nhật và quyền phản ứng được kiểm soát theo API.
+Tác động thực tế của các nút hiện tại
+Thao tác
+Code đang thực hiện
+Chưa thực hiện
+QUARANTINE_ASSET
+Đổi status của Asset thành offline; chuyển sự cố sang contained và lưu hành động.
+Không tắt card mạng, không đổi VLAN và không cô lập thiết bị ngoài đời thực.
+BLOCK_IP
+Ghi nội dung chặn IP vào lịch sử; chuyển sự cố sang contained.
+Không gọi API firewall hoặc chạy lệnh chặn IP trên hệ điều hành.
+RESOLVE_INCIDENT
+Chuyển trạng thái resolved; lưu ghi chú, nội dung giải quyết và thời điểm kết thúc.
+Không tự vá lỗ hổng hoặc kiểm chứng rằng nguyên nhân đã được loại bỏ.
+
+Phần còn thiếu
+•  Connector tới firewall, WAF, EDR hoặc Wazuh Active Response để thi hành hành động thật.
+•  Kiểm tra kết quả sau thi hành: luật đã tồn tại chưa, lưu lượng đã bị chặn chưa, thiết bị còn truy cập được không.
+•  Playbook có điều kiện, cơ chế phê duyệt thao tác nhạy cảm, rollback và xử lý khi thao tác thực tế thất bại.
+•  Liên kết tự động cảnh báo → sự cố → hành động, cùng SLA và thông báo cho người phụ trách.
+Thông báo “đã chặn IP” hoặc “đã cô lập” trên giao diện hiện chưa phải bằng chứng ngăn chặn mạng thật. Khi trình diễn cần mô tả đúng đây là quản lý quy trình và trạng thái.
+Đối chiếu mã nguồn: server/src/services/incidentService.js: executeResponseAction; server/src/routes/incidentRoutes.js.
+07  Recover — Phục hồi
+Mục tiêu: lưu bản sao dữ liệu và hỗ trợ theo dõi quá trình phục hồi sau sự cố. Phải tách biệt khả năng sao lưu đã có với khả năng phục hồi dữ liệu đang còn thiếu.
+Những phần đã thực hiện
+•  Tạo file sao lưu cơ sở dữ liệu SQLite bằng VACUUM INTO; lưu tên, vị trí, dung lượng, người tạo, thời gian và trạng thái.
+•  Tính SHA-256 khi tạo backup và so sánh checksum khi kiểm tra; phát hiện file bị thay đổi khi có checksum đã lưu.
+•  Kiểm tra file tồn tại, trạng thái bản sao và checksum trước quy trình phục hồi; từ chối file không khớp checksum.
+•  Quản lý danh sách backup, xóa bản sao và lưu RecoveryHistory; có phân quyền cho Admin/IT Manager theo từng thao tác.
+Cách khôi phục hiện tại hoạt động
+restoreBackup xác minh điều kiện rồi tạo bản ghi RecoveryHistory với status="simulated". Hàm trả thông báo mô phỏng; không thay thế file DB đang chạy, không nạp lại dữ liệu nghiệp vụ và không khởi động lại kết nối để phục hồi thật.
+Khả năng
+Đánh giá
+Tạo file backup
+Đã triển khai thực tế trong code.
+Kiểm tra toàn vẹn file
+Có SHA-256; không đồng nghĩa đã thử phục hồi thành công.
+Phục hồi dữ liệu
+Chưa triển khai thật; hiện chỉ ghi lịch sử mô phỏng.
+Dự phòng / HA
+Chưa có failover, cân bằng tải hoặc nhân bản cơ sở dữ liệu.
+
+Phần còn thiếu
+•  Quy trình restore thật có bảo trì, đóng kết nối DB, sao lưu trạng thái trước phục hồi, khôi phục và kiểm tra sau phục hồi.
+•  Lịch backup tự động, chính sách giữ bản sao, bản sao ngoài máy/off-site, mã hóa và kiểm soát quyền file.
+•  Đo RPO/RTO và diễn tập: tạo dữ liệu A → backup → sửa thành B → phục hồi → xác nhận trở về A.
+•  Đường dẫn DB trong backupService đang cố định theo thư mục dự án; cần đồng bộ với DATABASE_URL khi đổi môi trường triển khai.
+Đối chiếu mã nguồn: server/src/services/backupService.js; server/tests/backup-recovery.test.js; server/prisma/schema.prisma.
+08  Khoảng trống và lộ trình hoàn thiện
+Ưu tiên
+Hạng mục
+Tiêu chí hoàn thành
+1 — Detect
+API nhận cảnh báo Wazuh thật; script gửi từ Manager; xác thực, chống trùng và ghi log lỗi.
+Một sự kiện trên Win11 tạo cảnh báo ở Manager và tự xuất hiện trên web, không bấm mô phỏng.
+1 — Recover
+Restore dữ liệu thật và diễn tập trên bản sao môi trường.
+Khôi phục DB từ B về A, kiểm tra dữ liệu, kết nối và thời gian phục hồi.
+1 — Protect
+Kiểm tra khóa tài khoản trên request; thu hồi phiên, MFA và quản trị mở khóa.
+Token của tài khoản bị khóa không tiếp tục gọi API được; mở khóa có nhật ký.
+2 — Respond
+Thực thi một hành động chặn IP thật qua công cụ được quản lý.
+Có bằng chứng luật được áp dụng và kết nối thử bị chặn; có gỡ luật/rollback.
+2 — Identify
+Chuẩn hóa kết quả và chống trùng; lịch quét; thêm connector cho máy quét khác.
+Quét lặp không làm tăng trùng phát hiện; có định danh nguồn và lịch sử từng lần.
+2 — Báo cáo
+Bỏ nhãn tuân thủ gắn cứng, thêm trạng thái và bằng chứng theo chức năng.
+Báo cáo thể hiện rõ đã làm, mô phỏng, chưa làm và lần kiểm thử gần nhất.
+3 — Vận hành
+HTTPS, secret management, giám sát tác vụ, backup ngoài máy và thử tải.
+Có hướng dẫn triển khai và giám sát; kiểm thử theo cấu hình vận hành thực tế.
+
+Những giới hạn cần công bố khi báo cáo dự án
+•  reportService đang gắn cứng complianceStatus="100% Implemented" cho cả 5 nhóm và monitoringIntegrations=4. Những giá trị này chưa phản ánh mức độ tích hợp thực tế.
+•  Điểm Security Posture là công thức nội bộ dựa trên số lượng bản ghi; không phải điểm đánh giá hay chứng nhận chính thức của NIST.
+•  Đồ án tổ chức theo 5 nhóm CSF 1.1. Việc ánh xạ menu/nhãn chức năng chỉ giúp trình bày, không tự chứng minh đạt toàn bộ yêu cầu của khung.
+Đánh giá tổng thể: có nền tảng quản lý tập trung, bảo vệ ứng dụng cơ bản và quét Nmap thật; còn cần tích hợp nguồn phát hiện, tác động ứng phó và phục hồi dữ liệu thực tế để hoàn thiện chu trình.
+09  Kiểm thử và nguồn đối chiếu
+Kết quả đã ghi nhận trong quá trình phát triển
+Hạng mục
+Bằng chứng / phạm vi
+Nmap backend
+7 kiểm thử đạt: kiểm tra đầu vào, đọc kết quả, lưu trạng thái, nhánh thất bại, thiếu executable, chặn chạy đồng thời và quét một HTTP service tạm trên localhost.
+Bộ đọc báo cáo
+9 kiểm thử đạt cho Nmap TXT/JSON, ZAP và chặn khai báo XML ENTITY/DOCTYPE. Chưa chứng minh bộ đọc Nessus/OpenVAS tương thích tất cả file thực tế.
+Khóa đăng nhập
+Bài test service đã đạt: khóa 5 phút lần đầu, không cộng lỗi lúc đang khóa, đăng nhập đúng sau hết khóa và khóa vĩnh viễn ở đợt sai tiếp theo.
+Frontend
+Build thành công; lint thành phần quét Nmap mới thành công. Chưa có bộ test trình duyệt đầy đủ cho toàn bộ hệ thống.
+Backup / RBAC
+Có mã test trong server/tests. Tài liệu không tuyên bố cả bộ backend đã được chạy lại và đạt; test backup hiện kiểm tra toàn vẹn/từ chối file hỏng, không kiểm chứng restore thật.
+
+Kịch bản nghiệm thu đề xuất
+•  Identify: nhập hoặc quét tài sản thử → kiểm tra tổng số, bản ghi và lịch sử sau khi tải lại trang.
+•  Protect: test tài khoản riêng qua 2 đợt sai; dùng User gọi API đặc quyền và kiểm tra HTTP 403.
+•  Detect: hiện có thể test nhật ký và mô phỏng; sau tích hợp cần phát sinh sự kiện thật trên Agent và theo dấu tới web.
+•  Respond: hiện kiểm tra trạng thái/hành động; khi nối firewall cần kiểm tra kết nối mạng trước và sau chặn.
+•  Recover: kiểm tra file/checksum; chỉ đánh dấu restore hoàn thành khi dữ liệu thật quay về trạng thái bản sao.
+Nguồn và phạm vi rà soát
+Nguồn chính là mã nguồn hiện tại: server/prisma/schema.prisma; server/src/services/{auth,asset,vulnerability,risk,integration,incident,backup,report,nmapScan}Service.js; middleware/auth.js; client/src/pages/VulnerabilityPage.jsx; client/src/utils/parse*Report.js; các file test trong server/tests và client/src/utils. Tài liệu không suy diễn rằng môi trường Wazuh bên ngoài đã triển khai xong.
+Tham khảo triển khai Wazuh Manager và custom integration (thiết kế tương lai):
+https://documentation.wazuh.com/current/installation-guide/wazuh-server/index.html
+https://documentation.wazuh.com/current/user-manual/manager/integration-with-external-apis.html
+Khuyến nghị khi bảo vệ đồ án: trình diễn bằng dữ liệu thử, kèm ảnh trước/sau, trạng thái API và nhật ký. Không sử dụng nhãn “100%” thay cho bằng chứng kiểm thử.

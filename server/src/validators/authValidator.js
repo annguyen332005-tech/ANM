@@ -10,7 +10,7 @@ const registerSchema = z.object({
 
 const loginSchema = z.object({
   email: z.string().email('Email không đúng định dạng'),
-  password: z.string().min(8, 'Mật khẩu phải từ 8 ký tự trở lên').max(128),
+  password: z.string().min(1, 'Vui lòng nhập mật khẩu').max(128),
 });
 
 module.exports = {

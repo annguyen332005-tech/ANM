@@ -48,7 +48,7 @@ app.use(cors({
       callback(null, true);
       return;
     }
-
+    console.log('[CORS BLOCKED]', JSON.stringify(origin));
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -78,6 +78,7 @@ app.use('/api/assets', assetRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/vulnerabilities', vulnerabilityRoutes);
+app.use('/api/nmap-scans', require('./routes/nmapScanRoutes'));
 app.use('/api/risks', riskRoutes);
 app.use('/api/audit-logs', auditRoutes);
 app.use('/api/incidents', incidentRoutes);

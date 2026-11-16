@@ -92,7 +92,20 @@ class AuthService {
       },
     });
 
-    if (!user || !user.isActive) {
+    if (user && !user.isActive) {
+      const error = new Error('Tài khoản đã bị khóa vĩnh viễn hoặc bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.');
+      error.statusCode = 403;
+      throw error;
+    }
+
+    if (user?.lockedUntil && user.lockedUntil > new Date()) {
+      const seconds = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 1000);
+      const error = new Error(`Tài khoản đang bị khóa 5 phút do nhập sai mật khẩu 5 lần. Vui lòng thử lại sau ${seconds} giây.`);
+      error.statusCode = 403;
+      throw error;
+    }
+
+    if (!user) {
       await auditLog({
         action: 'LOGIN_FAILED',
         resource: 'auth',
@@ -110,14 +123,18 @@ class AuthService {
     if (!validPassword) {
       const nextFailCount = user.failedLoginCount + 1;
       const willLock = nextFailCount >= 5;
+      const permanent = willLock && user.lockoutCount >= 1;
 
-      await prisma.user.update({
-        where: { id: user.id },
+      const changed = await prisma.user.updateMany({
+        where: { id: user.id, failedLoginCount: user.failedLoginCount, lockoutCount: user.lockoutCount, lockedUntil: user.lockedUntil, isActive: true },
         data: {
-          failedLoginCount: nextFailCount,
-          isActive: willLock ? false : user.isActive,
+          failedLoginCount: willLock ? 0 : nextFailCount,
+          lockoutCount: willLock ? user.lockoutCount + 1 : user.lockoutCount,
+          lockedUntil: willLock && !permanent ? new Date(Date.now() + 5 * 60 * 1000) : null,
+          isActive: !permanent,
         },
       });
+      if (!changed.count) return this.login({ email, password }, ipAddress);
 
       await auditLog({
         userId: user.id,
@@ -126,29 +143,33 @@ class AuthService {
         ipAddress: ipAddress || 'unknown',
         status: 'failed',
         details: willLock
-          ? 'Tài khoản đã bị khóa do đăng nhập sai 5 lần liên tiếp'
+          ? (permanent ? 'Khóa vĩnh viễn: tiếp tục sai 5 lần sau lần khóa đầu tiên' : 'Khóa 5 phút: đăng nhập sai 5 lần liên tiếp lần đầu')
           : `Sai mật khẩu lần thứ ${nextFailCount}`,
       });
 
       if (willLock) {
-        const error = new Error('Tài khoản đã bị tạm khóa do nhập sai mật khẩu quá 5 lần.');
+        const error = new Error(permanent
+          ? 'Tài khoản đã bị khóa vĩnh viễn do tiếp tục nhập sai mật khẩu 5 lần sau lần khóa đầu tiên. Vui lòng liên hệ quản trị viên.'
+          : 'Tài khoản đã bị khóa 5 phút do nhập sai mật khẩu 5 lần. Sau khi hết khóa, nếu tiếp tục sai đủ 5 lần, tài khoản sẽ bị khóa vĩnh viễn.');
         error.statusCode = 403;
         throw error;
       }
 
-      const error = new Error('Email hoặc mật khẩu không chính xác.');
+      const error = new Error(`Email hoặc mật khẩu không chính xác. Đã sai ${nextFailCount}/5 lần. ${user.lockoutCount >= 1 ? 'Sai đủ 5 lần sẽ khóa vĩnh viễn.' : 'Sai đủ 5 lần sẽ khóa 5 phút.'}`);
       error.statusCode = 401;
       throw error;
     }
 
     // Reset failed count and update lastLogin
-    await prisma.user.update({
-      where: { id: user.id },
+    const changed = await prisma.user.updateMany({
+      where: { id: user.id, failedLoginCount: user.failedLoginCount, lockoutCount: user.lockoutCount, lockedUntil: user.lockedUntil, isActive: true },
       data: {
         failedLoginCount: 0,
+        lockedUntil: null,
         lastLoginAt: new Date(),
       },
     });
+    if (!changed.count) return this.login({ email, password }, ipAddress);
 
     await auditLog({
       userId: user.id,

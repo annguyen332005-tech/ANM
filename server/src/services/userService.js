@@ -19,6 +19,8 @@ class UserService {
       lastName: user.lastName,
       isActive: user.isActive,
       failedLoginCount: user.failedLoginCount,
+      lockoutCount: user.lockoutCount,
+      lockedUntil: user.lockedUntil,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
       roles: user.userRoles.map((ur) => ur.role.name),

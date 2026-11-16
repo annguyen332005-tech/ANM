@@ -14,7 +14,7 @@ async function runAllTests() {
   // Test 1
   try {
     await testBruteForceLockout();
-    results.push({ name: 'Brute-force Protection (5 fails -> lockout)', status: 'PASSED' });
+    results.push({ name: 'Brute-force Protection (5 fails -> 5 minutes, repeat -> permanent)', status: 'PASSED' });
   } catch (err) {
     results.push({ name: 'Brute-force Protection', status: 'FAILED', error: err.message });
   }
