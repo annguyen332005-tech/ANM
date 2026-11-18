@@ -1,19 +1,27 @@
 import { useState } from 'react';
 import { incidentService } from '../../services/incidentService';
+import { useAuth } from '../../context/AuthContext';
 
 const ACTION_TYPES = [
   { value: 'INITIAL_DISCOVERY', label: '🔍 Phát hiện ban đầu', color: 'text-blue-400' },
   { value: 'ANALYZE_LOGS', label: '📊 Phân tích log', color: 'text-cyan-400' },
   { value: 'NOTIFY_STAKEHOLDERS', label: '📢 Thông báo bên liên quan', color: 'text-yellow-400' },
-  { value: 'QUARANTINE_ASSET', label: '🔒 Cô lập tài sản', color: 'text-orange-400' },
-  { value: 'BLOCK_IP', label: '🚫 Chặn IP', color: 'text-red-400' },
+  { value: 'QUARANTINE_ASSET', label: '🔒 Cô lập (mô phỏng)', color: 'text-orange-400' },
+  { value: 'BLOCK_IP', label: '🚫 Chặn ping từ IP', color: 'text-red-400' },
+  { value: 'UNBLOCK_IP', label: '🔓 Gỡ chặn ping', color: 'text-cyan-400' },
   { value: 'RESOLVE_INCIDENT', label: '✅ Giải quyết sự cố', color: 'text-green-400' },
   { value: 'CUSTOM_ACTION', label: '📝 Ghi chú/Hành động khác', color: 'text-slate-400' },
 ];
 
-const RESPONSE_ACTIONS = ['QUARANTINE_ASSET', 'BLOCK_IP', 'RESOLVE_INCIDENT'];
+const RESPONSE_ACTIONS = ['QUARANTINE_ASSET', 'BLOCK_IP', 'UNBLOCK_IP', 'RESOLVE_INCIDENT'];
 
 export default function ResponseActionsPanel({ incident, onRefresh }) {
+  const { hasRole } = useAuth();
+  const availableActions = RESPONSE_ACTIONS.filter((action) => {
+    if (['BLOCK_IP', 'UNBLOCK_IP'].includes(action) && !hasRole('Admin')) return false;
+    if (['resolved', 'closed'].includes(incident.status)) return action === 'UNBLOCK_IP';
+    return hasRole('Admin', 'Security Analyst');
+  });
   const [addingNote, setAddingNote] = useState(false);
   const [noteForm, setNoteForm] = useState({ action: 'CUSTOM_ACTION', notes: '' });
   const [responding, setResponding] = useState(false);
@@ -102,14 +110,14 @@ export default function ResponseActionsPanel({ incident, onRefresh }) {
       </div>
 
       {/* Quick Response Buttons */}
-      {incident.status !== 'closed' && incident.status !== 'resolved' && (
+      {availableActions.length > 0 && (
         <div>
           <p className="text-xs font-semibold text-slate-400 mb-2">HÀNH ĐỘNG ỨNG PHÓ NHANH</p>
           <div className="flex gap-2 flex-wrap">
-            {RESPONSE_ACTIONS.map((action) => {
+            {availableActions.map((action) => {
               const meta = getActionMeta(action);
               return (
-                <button key={action} onClick={() => { setResponseForm((f) => ({ ...f, actionType: action })); setShowResponseForm(true); }}
+                <button key={action} onClick={() => { setResponseForm({ actionType: action, reason: '', targetIp: incident.asset?.ipAddress || '' }); setError(''); setShowResponseForm(true); }}
                   className={`px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-semibold transition ${meta.color}`}>
                   {meta.label}
                 </button>
@@ -127,14 +135,15 @@ export default function ResponseActionsPanel({ incident, onRefresh }) {
             <label className="block text-xs text-slate-400 mb-1">Loại hành động</label>
             <select value={responseForm.actionType} onChange={(e) => setResponseForm((f) => ({ ...f, actionType: e.target.value }))}
               className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-cyan-500">
-              {RESPONSE_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+              {availableActions.map((a) => <option key={a} value={a}>{getActionMeta(a).label}</option>)}
             </select>
           </div>
-          {responseForm.actionType === 'BLOCK_IP' && (
+          {['BLOCK_IP', 'UNBLOCK_IP'].includes(responseForm.actionType) && (
             <div>
-              <label className="block text-xs text-slate-400 mb-1">IP cần chặn</label>
+              <p className="text-xs text-amber-300 mb-2">Thao tác thật trên Windows Firewall của máy backend: chỉ chặn/gỡ ping IPv4 từ IP nguồn vào MSI. Không chặn TCP/web. Cần quyền Admin trên web và quyền Administrator của backend.</p>
+              <label className="block text-xs text-slate-400 mb-1">IP nguồn Win11 cần chặn/gỡ</label>
               <input value={responseForm.targetIp} onChange={(e) => setResponseForm((f) => ({ ...f, targetIp: e.target.value }))}
-                placeholder="203.0.113.45" className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-cyan-500" />
+                required placeholder="192.168.146.132" className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-cyan-500" />
             </div>
           )}
           <div>
@@ -166,7 +175,7 @@ export default function ResponseActionsPanel({ incident, onRefresh }) {
           <form onSubmit={handleAddNote} className="mb-3 p-3 bg-slate-800/60 border border-slate-700 rounded-xl space-y-2">
             <select value={noteForm.action} onChange={(e) => setNoteForm((f) => ({ ...f, action: e.target.value }))}
               className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-cyan-500">
-              {ACTION_TYPES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+              {ACTION_TYPES.filter((a) => !RESPONSE_ACTIONS.includes(a.value)).map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
             </select>
             <textarea value={noteForm.notes} onChange={(e) => setNoteForm((f) => ({ ...f, notes: e.target.value }))}
               rows={2} required placeholder="Mô tả hành động, quan sát hoặc ghi chú..."

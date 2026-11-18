@@ -65,7 +65,7 @@ class WazuhService {
       typeof data.full_log === 'string' ? data.full_log.slice(0, 4000) : ''].filter(Boolean).join('\n');
     try {
       const result = await this.db.$transaction(async (tx) => {
-        const asset = data.agent.ip ? await tx.asset.findFirst({ where: { ipAddress: data.agent.ip } }) : null;
+        const asset = data.agent.ip ? await tx.asset.findFirst({ where: { ipAddress: data.agent.ip, deletedAt: null } }) : null;
         const alert = await tx.alert.create({ data: { title: `[Wazuh] ${data.rule.description.slice(0, 200)}`, description, severity, relatedAssetId: asset?.id || null } });
         const event = await tx.securityEvent.create({ data: { eventType: `WAZUH_RULE_${data.rule.id}`, source: 'Wazuh', severity, sourceIp, description } });
         await tx.wazuhReceipt.create({ data: { manager: data.manager.name, externalId: data.id, agentName: data.agent.name,

@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { backupService } from '../services/backupService';
 import { useAuth } from '../context/AuthContext';
+import AssetTrash from '../components/AssetTrash';
 
 export default function BackupRecoveryPage() {
   const { hasRole } = useAuth();
   const isAdmin = hasRole('Admin');
 
-  const [activeTab, setActiveTab] = useState('backups'); // 'backups' | 'history' | 'settings'
+  const [activeTab, setActiveTab] = useState('trash');
   const [backups, setBackups] = useState([]);
   const [stats, setStats] = useState(null);
   const [history, setHistory] = useState([]);
@@ -165,7 +166,7 @@ export default function BackupRecoveryPage() {
             </span>
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            NIST RC.RP / RC.IM – Kế hoạch sao lưu, kiểm tra tính toàn vẹn SHA-256 và phục hồi hệ thống
+            Thùng rác tài sản, khôi phục tài sản đã xóa và quản lý bản sao lưu hệ thống
           </p>
         </div>
         {isAdmin && (
@@ -214,7 +215,10 @@ export default function BackupRecoveryPage() {
       </div>
 
       {/* Tabs Switcher */}
-      <div className="flex border-b border-slate-800 gap-2">
+      <div className="flex flex-wrap border-b border-slate-800 gap-2">
+        <button onClick={() => setActiveTab('trash')} className={`px-4 py-2.5 text-sm font-semibold border-b-2 ${activeTab === 'trash' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400'}`}>
+          Thùng rác tài sản
+        </button>
         <button
           onClick={() => setActiveTab('backups')}
           className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition ${
@@ -248,6 +252,7 @@ export default function BackupRecoveryPage() {
       </div>
 
       {/* Tab 1: Backups List */}
+      {activeTab === 'trash' && <AssetTrash isAdmin={isAdmin} />}
       {activeTab === 'backups' && (
         <div className="space-y-4">
           <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
@@ -321,7 +326,7 @@ export default function BackupRecoveryPage() {
                                   onClick={() => setRestoreTarget(bk)}
                                   className="px-2.5 py-1 bg-emerald-950 hover:bg-emerald-900 border border-emerald-700/50 text-emerald-300 rounded text-xs transition"
                                 >
-                                  🔄 Khôi phục
+                                  🔄 Khôi phục DB (mô phỏng)
                                 </button>
                                 <button
                                   onClick={() => setDeleteConfirm(bk)}

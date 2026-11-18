@@ -11,12 +11,12 @@ class DashboardService {
       assets,
       recentEvents,
     ] = await Promise.all([
-      prisma.asset.count(),
+      prisma.asset.count({ where: { deletedAt: null } }),
       prisma.user.count(),
       prisma.vulnerability.count(),
       prisma.alert.count({ where: { status: 'open' } }),
       prisma.incident.count(),
-      prisma.asset.findMany({ select: { type: true, criticality: true, status: true } }),
+      prisma.asset.findMany({ where: { deletedAt: null }, select: { type: true, criticality: true, status: true } }),
       prisma.auditLog.findMany({
         orderBy: { createdAt: 'desc' },
         take: 10,

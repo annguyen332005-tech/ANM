@@ -219,7 +219,7 @@ class IncidentService {
     return incidentAction;
   }
 
-  async executeResponseAction(id, { actionType, notes }, userId, ipAddress) {
+  async executeResponseAction(id, { actionType, notes, targetIp }, userId, ipAddress) {
     const incident = await prisma.incident.findUnique({
       where: { id },
       include: { asset: true },
@@ -241,7 +241,7 @@ class IncidentService {
             where: { id: incident.assetId },
             data: { status: 'offline' },
           });
-          responseSummary = `Đã cô lập tài sản mạng ${incident.asset?.name} (${incident.asset?.ipAddress}) chuyển sang trạng thái Offline.`;
+          responseSummary = `Mô phỏng cô lập: ${incident.asset?.name} chuyển trạng thái Offline trong hệ thống; chưa ngắt kết nối mạng thực tế.`;
         } else {
           responseSummary = 'Cách ly tài sản: Không có tài sản liên kết.';
         }
@@ -249,9 +249,12 @@ class IncidentService {
         break;
 
       case 'BLOCK_IP':
-        responseSummary = `Tạo lệnh chặn IP nguồn đáng ngờ trên Firewall: ${notes || incident.asset?.ipAddress || 'External IP'}.`;
-        newStatus = 'contained';
+      case 'UNBLOCK_IP': {
+        const result = await require('./firewallService').apply(actionType === 'BLOCK_IP' ? 'Block' : 'Unblock', targetIp || incident.asset?.ipAddress);
+        responseSummary = `${actionType === 'BLOCK_IP' ? 'Đã tạo và xác minh luật chặn ping ICMPv4' : 'Đã gỡ luật chặn ping SecureWeb'} từ ${result.remoteIP} vào ${result.localIP}. Rule: ${result.ruleName}. Không chặn TCP/web hoặc kết nối tới máy khác.`;
+        newStatus = actionType === 'BLOCK_IP' ? 'contained' : incident.status;
         break;
+      }
 
       case 'RESOLVE_INCIDENT':
         newStatus = 'resolved';
@@ -259,8 +262,7 @@ class IncidentService {
         break;
 
       default:
-        responseSummary = `Thực hiện hành động: ${actionType}. Ghi chú: ${notes || ''}`;
-        break;
+        throw Object.assign(new Error('Hành động phản ứng không được hỗ trợ.'), { statusCode: 400 });
     }
 
     // Add action log

@@ -17,8 +17,8 @@ class ReportService {
       latestBackup,
       recentAuditLogs,
     ] = await Promise.all([
-      prisma.asset.count(),
-      prisma.asset.groupBy({ by: ['criticality'], _count: { id: true } }),
+      prisma.asset.count({ where: { deletedAt: null } }),
+      prisma.asset.groupBy({ where: { deletedAt: null }, by: ['criticality'], _count: { id: true } }),
       prisma.vulnerability.count(),
       prisma.vulnerability.groupBy({ by: ['severity'], _count: { id: true } }),
       prisma.risk.count(),
@@ -136,7 +136,7 @@ class ReportService {
   async exportData(type) {
     switch (type) {
       case 'assets':
-        return prisma.asset.findMany({ include: { category: true } });
+        return prisma.asset.findMany({ where: { deletedAt: null }, include: { category: true } });
       case 'vulnerabilities':
         return prisma.vulnerability.findMany({ include: { asset: true } });
       case 'risks':

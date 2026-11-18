@@ -4,7 +4,7 @@ const auditLog = require('../middleware/audit');
 class AssetService {
   async getAllAssets(filters = {}) {
     const { search, status, criticality, categoryId } = filters;
-    const where = {};
+    const where = { deletedAt: null };
 
     if (status && status !== 'all') {
       where.status = status;
@@ -49,7 +49,7 @@ class AssetService {
       },
     });
 
-    if (!asset) {
+    if (!asset || asset.deletedAt) {
       const error = new Error('Không tìm thấy tài sản.');
       error.statusCode = 404;
       throw error;
@@ -101,7 +101,7 @@ class AssetService {
 
   async updateAsset(id, data, userId, ipAddress) {
     const current = await prisma.asset.findUnique({ where: { id } });
-    if (!current) {
+    if (!current || current.deletedAt) {
       const error = new Error('Không tìm thấy tài sản để cập nhật.');
       error.statusCode = 404;
       throw error;
@@ -151,24 +151,55 @@ class AssetService {
 
   async deleteAsset(id, userId, ipAddress) {
     const asset = await prisma.asset.findUnique({ where: { id } });
-    if (!asset) {
+    if (!asset || asset.deletedAt) {
       const error = new Error('Không tìm thấy tài sản để xóa.');
       error.statusCode = 404;
       throw error;
     }
 
-    await prisma.asset.delete({ where: { id } });
+    await this.ensureNoScan(id);
+    const changed = await prisma.asset.updateMany({ where: { id, deletedAt: null }, data: { deletedAt: new Date(), deletedBy: userId } });
+    if (!changed.count) throw Object.assign(new Error('Tài sản đã được chuyển vào thùng rác.'), { statusCode: 409 });
 
     await auditLog({
       userId,
-      action: 'DELETE_ASSET',
+      action: 'TRASH_ASSET',
       resource: 'asset',
       ipAddress,
       status: 'success',
-      details: `Xóa tài sản: ${asset.name} (${asset.assetId})`,
+      details: `Chuyển tài sản vào thùng rác: ${asset.name} (${asset.assetId})`,
     });
 
-    return { message: 'Xóa tài sản thành công.' };
+    return { message: 'Đã chuyển tài sản vào Sao lưu & Phục hồi → Thùng rác tài sản.' };
+  }
+
+  async ensureNoScan(id) {
+    if (await prisma.scanJob.count({ where: { assetId: id, status: { in: ['queued', 'running'] } } })) {
+      throw Object.assign(new Error('Tài sản đang được quét Nmap. Vui lòng đợi tác vụ kết thúc.'), { statusCode: 409 });
+    }
+  }
+
+  async getTrash() {
+    return prisma.asset.findMany({ where: { deletedAt: { not: null } }, include: { category: true,
+      _count: { select: { vulnerabilities: true, risks: true, alerts: true, incidents: true } } }, orderBy: { deletedAt: 'desc' } });
+  }
+
+  async restoreAsset(id, userId, ipAddress) {
+    const changed = await prisma.asset.updateMany({ where: { id, deletedAt: { not: null } }, data: { deletedAt: null, deletedBy: null } });
+    if (!changed.count) throw Object.assign(new Error('Không tìm thấy tài sản trong thùng rác.'), { statusCode: 404 });
+    await auditLog({ userId, ipAddress, action: 'RESTORE_ASSET', resource: 'asset', details: `Khôi phục tài sản từ thùng rác: ${id}` });
+    return { message: 'Đã khôi phục tài sản về Quản lý tài sản.' };
+  }
+
+  async permanentlyDeleteAsset(id, confirmation, userId, ipAddress) {
+    const asset = await prisma.asset.findUnique({ where: { id } });
+    if (!asset || !asset.deletedAt) throw Object.assign(new Error('Chỉ được xóa vĩnh viễn tài sản đang ở thùng rác.'), { statusCode: 404 });
+    if (confirmation !== asset.assetId) throw Object.assign(new Error('Nhập đúng mã tài sản để xác nhận xóa vĩnh viễn.'), { statusCode: 400 });
+    await this.ensureNoScan(id);
+    const deleted = await prisma.asset.deleteMany({ where: { id, deletedAt: { not: null } } });
+    if (!deleted.count) throw Object.assign(new Error('Tài sản không còn trong thùng rác. Vui lòng tải lại.'), { statusCode: 409 });
+    await auditLog({ userId, ipAddress, action: 'PERMANENTLY_DELETE_ASSET', resource: 'asset', details: `Xóa vĩnh viễn tài sản: ${asset.name} (${asset.assetId}). Xóa kèm lỗ hổng/rủi ro; giữ cảnh báo/sự cố và bỏ liên kết tài sản.` });
+    return { message: 'Đã xóa vĩnh viễn tài sản khỏi dữ liệu hiện tại.' };
   }
 
   async getCategories() {

@@ -73,7 +73,7 @@ class RiskService {
 
   async createRisk(data, userId, ipAddress) {
     const asset = await prisma.asset.findUnique({ where: { id: data.assetId } });
-    if (!asset) {
+    if (!asset || asset.deletedAt) {
       const error = new Error('Tài sản liên kết không tồn tại.');
       error.statusCode = 404;
       throw error;

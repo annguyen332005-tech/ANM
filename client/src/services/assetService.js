@@ -1,6 +1,11 @@
 import api from './api';
 
 export const assetService = {
+  async getTrash() { return (await api.get('/assets/trash')).data; },
+  async restoreAsset(id) { return (await api.post(`/assets/trash/${id}/restore`)).data; },
+  async permanentlyDeleteAsset(id, confirmAssetId) {
+    return (await api.delete(`/assets/trash/${id}`, { data: { confirmAssetId } })).data;
+  },
   async getAssets(filters = {}) {
     const params = new URLSearchParams();
     if (filters.search) params.append('search', filters.search);

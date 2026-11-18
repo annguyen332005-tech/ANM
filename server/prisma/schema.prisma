@@ -67,6 +67,8 @@ model Asset {
   location    String?
   status      String        @default("active")
   criticality String        @default("medium")
+  deletedAt   DateTime?
+  deletedBy   String?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   category    AssetCategory? @relation(fields: [categoryId], references: [id])

@@ -1,0 +1,84 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+test('Asset trash: soft delete, restore exact record and relationships, confirmed permanent delete and RBAC', { timeout: 60000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'secureweb-trash-'));
+  const dbFile = path.join(dir, 'test.db');
+  fs.closeSync(fs.openSync(dbFile, 'w'));
+  const previous = { DATABASE_URL: process.env.DATABASE_URL, JWT_SECRET: process.env.JWT_SECRET };
+  process.env.DATABASE_URL = `file:${dbFile.replaceAll('\\', '/')}`;
+  process.env.JWT_SECRET = 'isolated-asset-trash-test-secret';
+  let db, server;
+  try {
+    execFileSync(process.execPath, [require.resolve('prisma'), 'db', 'push', '--skip-generate', '--schema', path.resolve(__dirname, '../prisma/schema.prisma')], { env: process.env, stdio: 'pipe' });
+    db = require('../src/config/prisma');
+    const app = require('../src/app');
+    const assets = require('../src/services/assetService');
+    const jwt = require('jsonwebtoken');
+    const role = await db.role.create({ data: { name: 'Admin' } });
+    const admin = await db.user.create({ data: { username: 'test-admin', email: 'admin@test.local', passwordHash: 'unused', userRoles: { create: { roleId: role.id } } } });
+    const ordinary = await db.user.create({ data: { username: 'test-user', email: 'user@test.local', passwordHash: 'unused' } });
+    const token = jwt.sign({ id: admin.id }, process.env.JWT_SECRET);
+    const userToken = jwt.sign({ id: ordinary.id }, process.env.JWT_SECRET);
+    const asset = await assets.createAsset({ assetId: 'TRASH-001', name: 'Máy thử A', type: 'Server', ipAddress: '192.168.146.99', status: 'maintenance', criticality: 'high', owner: 'Test owner' }, admin.id);
+    const vuln = await db.vulnerability.create({ data: { assetId: asset.id, title: 'Retained finding', severity: 'high' } });
+    const risk = await db.risk.create({ data: { assetId: asset.id, title: 'Retained risk', likelihood: 'high', impact: 'high', riskLevel: 'critical' } });
+    const alert = await db.alert.create({ data: { relatedAssetId: asset.id, title: 'Retained alert', description: 'Test', severity: 'high' } });
+    const incident = await db.incident.create({ data: { assetId: asset.id, title: 'Retained incident', description: 'Test', type: 'Other', severity: 'high' } });
+    server = app.listen(0, '127.0.0.1');
+    await new Promise((resolve) => server.once('listening', resolve));
+    const base = `http://127.0.0.1:${server.address().port}/api/assets`;
+    const request = (suffix, method = 'GET', body, auth = token) => fetch(base + suffix, { method, headers: { Authorization: `Bearer ${auth}`, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    assert.equal((await request('/trash', 'GET', undefined, userToken)).status, 403);
+    assert.equal((await request(`/trash/${asset.id}`, 'DELETE', { confirmAssetId: asset.assetId })).status, 404, 'active assets cannot be permanently deleted');
+    assert.equal((await request(`/${asset.id}`, 'DELETE')).status, 200);
+    assert.equal((await (await request('')).json()).length, 0);
+    assert.equal((await request(`/${asset.id}`)).status, 404);
+    const trashed = await (await request('/trash')).json();
+    assert.equal(trashed.length, 1);
+    assert.equal(trashed[0].id, asset.id);
+    assert.equal(trashed[0].deletedBy, admin.id);
+    assert.equal(trashed[0]._count.vulnerabilities, 1);
+    assert.equal(await db.risk.count(), 1);
+    await assert.rejects(assets.updateAsset(asset.id, { name: 'Forbidden' }, admin.id), (err) => err.statusCode === 404);
+    assert.equal((await require('../src/services/dashboardService').getStats()).stats.assetCount, 0);
+    assert.equal((await require('../src/services/reportService').exportData('assets')).length, 0);
+    await assert.rejects(assets.createAsset({ assetId: asset.assetId, name: 'Duplicate', type: 'Server' }, admin.id), (err) => err.statusCode === 409);
+    assert.equal((await request(`/trash/${asset.id}/restore`, 'POST', undefined, userToken)).status, 403);
+    assert.equal((await request(`/trash/${asset.id}/restore`, 'POST')).status, 200);
+    const restored = await (await request(`/${asset.id}`)).json();
+    assert.equal(restored.id, asset.id);
+    assert.equal(restored.status, 'maintenance');
+    assert.equal(restored.owner, 'Test owner');
+    assert.equal(restored.deletedAt, null);
+    assert.equal(restored.vulnerabilities[0].id, vuln.id);
+    assert.equal(restored.risks[0].id, risk.id);
+    assert.equal(restored.alerts[0].id, alert.id);
+    assert.equal((await (await request('/trash')).json()).length, 0);
+    assert.equal((await request(`/trash/${asset.id}/restore`, 'POST')).status, 404);
+    await db.scanJob.create({ data: { assetId: asset.id, assetName: asset.name, target: asset.ipAddress, ports: '80', createdBy: admin.id, status: 'running' } });
+    assert.equal((await request(`/${asset.id}`, 'DELETE')).status, 409);
+    await db.scanJob.updateMany({ data: { status: 'completed' } });
+    assert.equal((await request(`/${asset.id}`, 'DELETE')).status, 200);
+    assert.equal((await request(`/trash/${asset.id}`, 'DELETE', { confirmAssetId: 'WRONG' })).status, 400);
+    assert.equal((await request(`/trash/${asset.id}`, 'DELETE', { confirmAssetId: asset.assetId }, userToken)).status, 403);
+    assert.equal((await request(`/trash/${asset.id}`, 'DELETE', { confirmAssetId: asset.assetId })).status, 200);
+    assert.equal(await db.asset.count(), 0);
+    assert.equal(await db.vulnerability.count(), 0);
+    assert.equal(await db.risk.count(), 0);
+    assert.equal((await db.alert.findUnique({ where: { id: alert.id } })).relatedAssetId, null);
+    assert.equal((await db.incident.findUnique({ where: { id: incident.id } })).assetId, null);
+    assert.equal((await request(`/trash/${asset.id}/restore`, 'POST')).status, 404);
+    for (const action of ['TRASH_ASSET', 'RESTORE_ASSET', 'PERMANENTLY_DELETE_ASSET']) assert.ok(await db.auditLog.findFirst({ where: { action } }));
+  } finally {
+    if (server) { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); }
+    if (db) await db.$disconnect();
+    for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+    for (const name of fs.readdirSync(dir)) fs.unlinkSync(path.join(dir, name));
+    fs.rmdirSync(dir);
+  }
+});

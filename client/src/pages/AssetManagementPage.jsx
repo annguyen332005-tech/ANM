@@ -93,7 +93,7 @@ export default function AssetManagementPage() {
     try {
       setDeleteLoading(true);
       await assetService.deleteAsset(deleteConfirmAsset.id);
-      setMessage(`Đã xóa tài sản ${deleteConfirmAsset.name}.`);
+      setMessage(`Đã chuyển ${deleteConfirmAsset.name} vào Sao lưu & Phục hồi → Thùng rác tài sản. Có thể khôi phục tại đó.`);
       setDeleteConfirmAsset(null);
       fetchData();
       setTimeout(() => setMessage(''), 4000);
@@ -293,12 +293,12 @@ export default function AssetManagementPage() {
       <Modal
         isOpen={!!deleteConfirmAsset}
         onClose={() => setDeleteConfirmAsset(null)}
-        title="Xác nhận xóa tài sản"
+        title="Chuyển tài sản vào thùng rác"
         maxWidth="max-w-md"
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-300">
-            Bạn có chắc chắn muốn xóa tài sản{' '}
+            Chuyển tài sản sau vào Sao lưu & Phục hồi → Thùng rác tài sản (có thể khôi phục):{' '}
             <strong className="text-white font-mono">{deleteConfirmAsset?.name} ({deleteConfirmAsset?.assetId})</strong>?
           </p>
           <p className="text-xs text-red-400 bg-red-950/40 p-3 rounded border border-red-900/50">
@@ -316,7 +316,7 @@ export default function AssetManagementPage() {
               disabled={deleteLoading}
               className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold transition disabled:opacity-50"
             >
-              {deleteLoading ? 'Đang xóa...' : 'Xác nhận xóa'}
+              {deleteLoading ? 'Đang chuyển...' : 'Chuyển vào thùng rác'}
             </button>
           </div>
         </div>

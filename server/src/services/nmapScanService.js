@@ -82,7 +82,7 @@ class NmapScanService {
     this.busy = true;
     try {
       const asset = await this.db.asset.findUnique({ where: { id: assetId } });
-      if (!asset) throw fail('Không tìm thấy tài sản.', 404);
+      if (!asset || asset.deletedAt) throw fail('Không tìm thấy tài sản hoặc tài sản đang ở thùng rác.', 404);
       const target = validateTarget(asset.ipAddress);
       const selectedPorts = normalizePorts(ports);
       const job = await this.db.scanJob.create({ data: {
